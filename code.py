@@ -11,7 +11,7 @@ import requests
 # Set up SQLite database and server
 
 # Create a connection to the SQLite database
-conn = sqlite3.connect('boston_realty_data.db')
+conn = sqlite3.connect('housing.db')
 
 # Create a cursor object to interact with the database
 cursor = conn.cursor()
@@ -21,10 +21,13 @@ cursor.execute('''
                CREATE TABLE IF NOT EXISTS boston_realty_data (
                    id INTEGER PRIMARY KEY,
                    last_updated TEXT,
-                   price INTEGER,
+                   price TEXT,
+                   n_beds TEXT,
+                   n_baths TEXT,
                    available_date TEXT,
                    location TEXT,
-                   utilities TEXT
+                   utilities TEXT,
+                   amenities TEXT
                    )
                ''')
    
@@ -45,6 +48,12 @@ def web_crawler(url):
                 price = listing_box.find('div', class_='rentPrice')
                 if price:
                     price = price.string
+                n_beds = listing_box.find('div', class_='fa-fw fas fa-bed')
+                if n_beds:
+                    n_beds = n_beds.string
+                n_baths = listing_box.find('div', class_='fa-fw fas fa-bath')
+                if n_baths:
+                    n_baths = n_baths.string
                 avbl_date = listing_box.find('div', class_='listingAvailable')
                 if avbl_date:
                     avbl_date = avbl_date.string
@@ -55,27 +64,31 @@ def web_crawler(url):
                 utilities = listing_box.find('span', class_='listingHHW')
                 if utilities:
                     utilities = utilities.string
-                save_to_db(last_updated, price, avbl_date, location, utilities)
+                amenities = listing_box.find('div', class_='listingAmenities')
+                if amenities:
+                    amenities = amenities.string
+                save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities)
+            
         else:
             print('Target html element not found')
-        return last_updated, price, avbl_date, location, utilities
+        data = cursor.execute('SELECT * from boston_realty_data')
+        return data
     else:
         print(f'Website <{url}> unavailable!')
         return None
 
 # Store data in the SQLite database
-def save_to_db(last_updated, price, avbl_date, location, utilities):
-    insert_query = 'INSERT INTO boston_realty_data (last_updated, price, available_date, location, utilities) VALUES (?, ?, ?, ?, ?)'
-    values = (last_updated, price, avbl_date, location, utilities)
+def save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities):
+    insert_query = 'INSERT INTO boston_realty_data (last_updated, price, n_beds, n_baths, available_date, location, utilities, amenities) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+    values = (last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities)
     conn.execute(insert_query, values)
     conn.commit()
 
 # Main function to initiate scraping
 def main():
     url = 'https://bostonpads.com/boston-apartments/'
-    last_updated, price, avbl_date, location, utilities = web_crawler(url)
-    #save_to_db(last_updated, price, avbl_date, location, utilities)
-    print(f"Data for '{location}' saved to the database.")
+    web_crawler(url)
+    print("Data saved to the database.")
     
 if __name__ == "__main__":
     main()
