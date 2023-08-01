@@ -40,10 +40,21 @@ def web_crawler(url):
         if listing_dump:
             for listing_box in listing_dump:
                 last_updated = listing_box.find('div', class_='lastUpdated')
-                price = listing_box.find('div', class_='listingPrice')
+                if last_updated:
+                    last_updated = last_updated.string
+                price = listing_box.find('div', class_='rentPrice')
+                if price:
+                    price = price.string
                 avbl_date = listing_box.find('div', class_='listingAvailable')
-                location = listing_box.find('div', class_='buildingAddress')
-                utilities = listing_box.find('div', class_='listingAmenities')
+                if avbl_date:
+                    avbl_date = avbl_date.string
+                location = listing_box.find('div', class_='listingLocation col-xs-12')
+                location = location.find('a')
+                if location:
+                    location = location.string
+                utilities = listing_box.find('span', class_='listingHHW')
+                if utilities:
+                    utilities = utilities.string
                 save_to_db(last_updated, price, avbl_date, location, utilities)
         else:
             print('Target html element not found')
