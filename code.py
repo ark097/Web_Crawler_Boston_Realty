@@ -1,9 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Spyder Editor
-
-This is a temporary script file.
-"""
 
 
 # NOTE: Install beautifulsoup4 and requests packages beforehand
@@ -25,12 +20,11 @@ cursor = conn.cursor()
 cursor.execute('''
                CREATE TABLE IF NOT EXISTS boston_realty_data (
                    id INTEGER PRIMARY KEY,
-                   listing_name TEXT,
-                   listing_desc TEXT,
-                   n_beds INTEGER,
-                   n_baths INTEGER,
+                   last_updated TEXT,
+                   price INTEGER,
+                   available_date TEXT,
                    location TEXT,
-                   price INTEGER
+                   utilities TEXT
                    )
                ''')
    
@@ -42,33 +36,35 @@ def web_crawler(url):
     response = requests.get(url)
     if response.status_code == 200:
         soup = BeautifulSoup(response.content, 'html.parser')
-        #title = soup.title.string.strip() if soup.title else 'N/A'
-        target_element = soup.find('div', class_="property-rows", id="content_link", recursive=True)
-        if target_element:
-            listing_desc = target_element
+        listing_dump = soup.find_all('div', class_="col-sm-6 col-xs-12")
+        if listing_dump:
+            for listing_box in listing_dump:
+                last_updated = listing_box.find('div', class_='lastUpdated')
+                price = listing_box.find('div', class_='listingPrice')
+                avbl_date = listing_box.find('div', class_='listingAvailable')
+                location = listing_box.find('div', class_='buildingAddress')
+                utilities = listing_box.find('div', class_='listingAmenities')
+                save_to_db(last_updated, price, avbl_date, location, utilities)
         else:
             print('Target html element not found')
-        return listing_desc
+        return last_updated, price, avbl_date, location, utilities
     else:
+        print(f'Website <{url}> unavailable!')
         return None
 
 # Store data in the SQLite database
-def save_to_db(content):
-    insert_query = 'INSERT INTO boston_realty_data (listing_desc) VALUES (?)'
-    values = (content)
+def save_to_db(last_updated, price, avbl_date, location, utilities):
+    insert_query = 'INSERT INTO boston_realty_data (last_updated, price, available_date, location, utilities) VALUES (?, ?, ?, ?, ?)'
+    values = (last_updated, price, avbl_date, location, utilities)
     conn.execute(insert_query, values)
     conn.commit()
 
 # Main function to initiate scraping
 def main():
     url = 'https://bostonpads.com/boston-apartments/'
-    listing_desc = web_crawler(url)
-    
-    if listing_desc:
-        save_to_db(listing_desc)
-        print(f"Data for '{listing_desc}' saved to the database.")
-    else:
-        print("Failed to fetch data from the website.")   
+    last_updated, price, avbl_date, location, utilities = web_crawler(url)
+    #save_to_db(last_updated, price, avbl_date, location, utilities)
+    print(f"Data for '{location}' saved to the database.")
     
 if __name__ == "__main__":
     main()
