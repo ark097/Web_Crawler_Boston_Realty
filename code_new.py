@@ -14,7 +14,7 @@ from dateutil import parser
 # Set up SQLite database and server
 
 # Create a connection to the SQLite database
-conn = sqlite3.connect('housing.db')
+conn = sqlite3.connect('Housing_Data.db')
 
 # Create a cursor object to interact with the database
 cursor = conn.cursor()
@@ -48,6 +48,7 @@ conn.commit()
 
 def fetch_data(url):
     try:
+        print("Starting to scrape data.")
         response = requests.get(url)
         response.raise_for_status()  # Raise an exception for any bad response status (4xx, 5xx)
 
@@ -55,6 +56,8 @@ def fetch_data(url):
         if data:
             # Process the fetched data
             listings = data["data"]
+            print("Data available. Loading " + str(len(listings)) + " listings.")
+            
             for listing in listings:
                 site_tags = boston_pads_tags
                 last_updated = parser.parse(listing.get(site_tags.last_updated)).date()
@@ -77,7 +80,7 @@ def fetch_data(url):
                            utilities, amenities, agent_name, agent_email, agent_phone, agent_fees)
         
         else:
-            print("No data")
+            print("No data available.")
     except requests.exceptions.RequestException as e:
         print(f"An error occurred while fetching data: {str(e)}")
         return None
