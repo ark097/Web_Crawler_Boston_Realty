@@ -61,7 +61,7 @@ def fetch_data(url):
             for listing in listings:
                 site_tags = boston_pads_tags
                 last_updated = parser.parse(listing.get(site_tags.last_updated)).date()
-                price = listing.get(site_tags.price)
+                price = int(listing.get(site_tags.price).replace("$", "").replace(",",""))
                 n_beds = listing.get(site_tags.n_beds)
                 n_baths = listing.get(site_tags.n_baths)
                 avbl_date = parser.parse(listing.get(site_tags.avbl_date))
