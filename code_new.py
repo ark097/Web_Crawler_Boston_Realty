@@ -9,6 +9,7 @@ Created on Mon Jul 31 22:35:19 2023
 import requests
 import sqlite3
 from WebpageClass import WebpageData
+from dateutil import parser
 
 # Set up SQLite database and server
 
@@ -19,23 +20,26 @@ conn = sqlite3.connect('housing.db')
 cursor = conn.cursor()
 
 boston_pads_tags = WebpageData('date_modified', 'price', 'bed_room', 'baths',
-                               'date_available', 'building_address', 'street_address',
-                               'city')
+                               'date_available', 'building_address', 'sub_area_name',
+                               'agent_full_name', 'agent_email', 'agent_phone',
+                               'fee')
 
 # Create a table to store the scraped data
 cursor.execute('''
                CREATE TABLE IF NOT EXISTS bostonpads_data (
-                   id INTEGER PRIMARY KEY,
-                   apartment_name TEXT,
-                   
-                   last_updated TEXT,
-                   price TEXT,
-                   n_beds TEXT,
-                   n_baths TEXT,
-                   available_date TEXT,
+                   id INTEGER PRIMARY KEY,                   
+                   last_updated DATETIME,
+                   price INT,
+                   n_beds INT,
+                   n_baths INT,
+                   available_date DATETIME,
                    location TEXT,
                    utilities TEXT,
-                   amenities TEXT
+                   amenities TEXT,
+                   agent_name TEXT,
+                   agent_email TEXT,
+                   agent_phone TEXT,
+                   agent_fees TEXT
                    )
                ''')
    
@@ -53,24 +57,34 @@ def fetch_data(url):
             listings = data["data"]
             for listing in listings:
                 site_tags = boston_pads_tags
-                last_updated = listing.get(site_tags.last_updated)
+                last_updated = parser.parse(listing.get(site_tags.last_updated)).date()
                 price = listing.get(site_tags.price)
                 n_beds = listing.get(site_tags.n_beds)
                 n_baths = listing.get(site_tags.n_baths)
-                avbl_date = listing.get(site_tags.avbl_date)
-                building_address = listing.get(site_tags.building_address, {})
-                location = building_address.get(site_tags.location) or building_address.get(site_tags.city)
+                avbl_date = parser.parse(listing.get(site_tags.avbl_date))
+                if(url == "https://m.bostonpads.com/api/listings-short?location=boston&unique=1&results_per_page=4000" 
+                   and listing.get(site_tags.building_address) is not None):
+                    location = listing.get(site_tags.building_address)["street_address"] or listing.get(site_tags.area)
+                else:
+                    location = listing.get(site_tags.building_address) or listing.get(site_tags.area)
                 utilities = None  # Fill in the correct field name if available in the data
                 amenities = None  # Fill in the correct field name if available in the data
-                save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities)
-
+                agent_name = listing.get(site_tags.agent_name)
+                agent_email = listing.get(site_tags.agent_email)
+                agent_phone = listing.get(site_tags.agent_phone)
+                agent_fees = "No" if listing.get(site_tags.agent_fees) == 0 else "Yes"
+                save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location,
+                           utilities, amenities, agent_name, agent_email, agent_phone, agent_fees)
+        
+        else:
+            print("No data")
     except requests.exceptions.RequestException as e:
         print(f"An error occurred while fetching data: {str(e)}")
         return None
 
-def save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities):
-    insert_query = 'INSERT INTO bostonpads_data (last_updated, price, n_beds, n_baths, available_date, location, utilities, amenities) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    values = (last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities)
+def save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees):
+    insert_query = 'INSERT INTO bostonpads_data (last_updated, price, n_beds, n_baths, available_date, location, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    values = (last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees)
     conn.execute(insert_query, values)
     conn.commit()
 
