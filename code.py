@@ -7,6 +7,7 @@
 from bs4 import BeautifulSoup
 import sqlite3
 import requests
+import re
 
 # Set up SQLite database and server
 
@@ -18,16 +19,18 @@ cursor = conn.cursor()
 
 # Create a table to store the scraped data
 cursor.execute('''
-               CREATE TABLE IF NOT EXISTS boston_realty_data (
+               CREATE TABLE IF NOT EXISTS bostonpads_data (
                    id INTEGER PRIMARY KEY,
-                   last_updated TEXT,
                    price TEXT,
                    n_beds TEXT,
                    n_baths TEXT,
                    available_date TEXT,
                    location TEXT,
                    utilities TEXT,
-                   amenities TEXT
+                   amenities TEXT,
+                   agent_name TEXT,
+                   agent_email TEXT,
+                   agent_phone TEXT
                    )
                ''')
    
@@ -36,59 +39,80 @@ conn.commit()
 
 # Write the web scraper
 def web_crawler(url):
-    response = requests.get(url)
-    if response.status_code == 200:
+    page_num = 282
+    last_page_num = None
+    
+    while True:
+        # Append the current page number to the URL
+        current_url = f"{url}&page={page_num}"
+        
+        # Make an HTTP request to the URL
+        response = requests.get(current_url)
+        response.raise_for_status()
         soup = BeautifulSoup(response.content, 'html.parser')
-        listing_dump = soup.find_all('div', class_="col-sm-6 col-xs-12")
-        if listing_dump:
-            for listing_box in listing_dump:
-                last_updated = listing_box.find('div', class_='lastUpdated')
-                if last_updated:
-                    last_updated = last_updated.string
-                price = listing_box.find('div', class_='rentPrice')
-                if price:
-                    price = price.string
-                n_beds = listing_box.find('div', class_='fa-fw fas fa-bed')
-                if n_beds:
-                    n_beds = n_beds.string
-                n_baths = listing_box.find('div', class_='fa-fw fas fa-bath')
-                if n_baths:
-                    n_baths = n_baths.string
-                avbl_date = listing_box.find('div', class_='listingAvailable')
-                if avbl_date:
-                    avbl_date = avbl_date.string
-                location = listing_box.find('div', class_='listingLocation col-xs-12')
-                location = location.find('a')
-                if location:
-                    location = location.string
-                utilities = listing_box.find('span', class_='listingHHW')
-                if utilities:
-                    utilities = utilities.string
-                amenities = listing_box.find('div', class_='listingAmenities')
-                if amenities:
-                    amenities = amenities.string
-                save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities)
-            
-        else:
-            print('Target html element not found')
-        data = cursor.execute('SELECT * from boston_realty_data')
-        return data
-    else:
-        print(f'Website <{url}> unavailable!')
-        return None
+        
+        # Find the listings on the current page
+        listings = soup.find('div', class_='search_results_area').find_all('div', class_='property_item')
+        if not listings:
+            print("No listings found on this page.")
+            break
+        
+        # Process the listings on the current page
+        for listing in listings:
+            listing_details = listing.find('div', class_='item_props').find_all('div', class_='column')
+            if listing_details:
+                price = listing_details[0].text.strip()
+                n_beds = listing_details[1].text.strip()
+                n_baths = listing_details[2].text.strip()
+                avbl_date = listing_details[3].text.strip()
+            location = listing.find('a', class_='item_title')
+            if location:
+                location = location.text.strip()
+            utilities = listing.find('a')
+            if utilities:
+                utilities = utilities['href']
+            amenities = listing.find('a')
+            if amenities:
+                amenities = amenities['href']
+            agent_details = soup.find('div', class_='contacts').find_all('li')
+            if agent_details:
+                agent_name = agent_details[0].text.strip()
+                agent_email = agent_details[2].find('a', href=True)['href'].split(':')[1]
+                agent_phone = agent_details[1].find('a', href=True)['href'].split(':')[1]
+            save_to_db(price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone)
+        
+        # Check for the last page
+        counter_div = soup.find('div', class_='counter')
+        if counter_div:
+            page_text = counter_div.text.strip()
+            match = re.search(r'\d+', page_text)
+            if match:
+                current_page = int(match.group())
+                if last_page_num is None:
+                    last_page_num = current_page
+                elif current_page == last_page_num:
+                    print("Reached the last page.")
+                    return
+        
+        # Increment the page number for the next iteration
+        page_num += 1
 
 # Store data in the SQLite database
-def save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities):
-    insert_query = 'INSERT INTO boston_realty_data (last_updated, price, n_beds, n_baths, available_date, location, utilities, amenities) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-    values = (last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities)
+def save_to_db(price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone):
+    insert_query = 'INSERT INTO bostonpads_data (price, n_beds, n_baths, available_date, location, utilities, amenities, agent_name, agent_email, agent_phone) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    values = (price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone)
     conn.execute(insert_query, values)
     conn.commit()
 
 # Main function to initiate scraping
 def main():
-    url = 'https://bostonpads.com/boston-apartments/'
+    url = "https://ygl.is/bryn-allen-1?areas%5B%5D=Boston&areas%5B%5D=Boston%3AAllston&areas%5B%5D=Boston%3ABack+Bay&areas%5B%5D=Boston%3ABay+Village&areas%5B%5D=Boston%3ABeacon+Hill&areas%5B%5D=Boston%3ABrighton&areas%5B%5D=Boston%3ACharlestown&areas%5B%5D=Boston%3AChinatown&areas%5B%5D=Boston%3ADorchester&areas%5B%5D=Boston%3AEast+Boston&areas%5B%5D=Boston%3AFenway&areas%5B%5D=Boston%3AFinancial+District&areas%5B%5D=Boston%3AFort+Hill&areas%5B%5D=Boston%3AHyde+Park&areas%5B%5D=Boston%3AJamaica+Plain&areas%5B%5D=Boston%3AKenmore&areas%5B%5D=Boston%3ALeather+District&areas%5B%5D=Boston%3AMattapan&areas%5B%5D=Boston%3AMidtown&areas%5B%5D=Boston%3AMission+Hill&areas%5B%5D=Boston%3ANorth+End&areas%5B%5D=Boston%3ARoslindale&areas%5B%5D=Boston%3ARoxbury&areas%5B%5D=Boston%3ASeaport+District&areas%5B%5D=Boston%3ASouth+Boston&areas%5B%5D=Boston%3ASouth+End&areas%5B%5D=Boston%3ATheatre+District&areas%5B%5D=Boston%3AWaterfront&areas%5B%5D=Boston%3AWest+End&areas%5B%5D=Boston%3AWest+Roxbury&page=282"
     web_crawler(url)
+    
     print("Data saved to the database.")
     
 if __name__ == "__main__":
     main()
+    
+    
+    
