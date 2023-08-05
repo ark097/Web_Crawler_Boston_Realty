@@ -10,6 +10,7 @@ import requests
 import sqlite3
 from WebpageClass import WebpageData
 from dateutil import parser
+import re
 
 # Set up SQLite database and server
 
@@ -22,7 +23,8 @@ cursor = conn.cursor()
 boston_pads_tags = WebpageData('date_modified', 'price', 'bed_room', 'baths',
                                'date_available', 'building_address', 'sub_area_name',
                                'agent_full_name', 'agent_email', 'agent_phone',
-                               'fee')
+                               'fee', 'heat', 'hot_water', 'electricity', 'parking', 
+                               'dish_washer', 'laundry_location', 'air_conditioning')
 
 # Create a table to store the scraped data
 cursor.execute('''
@@ -57,21 +59,28 @@ def fetch_data(url):
             # Process the fetched data
             listings = data["data"]
             print("Data available. Loading " + str(len(listings)) + " listings.")
-            
+
             for listing in listings:
                 site_tags = boston_pads_tags
                 last_updated = parser.parse(listing.get(site_tags.last_updated)).date()
                 price = int(listing.get(site_tags.price).replace("$", "").replace(",",""))
-                n_beds = listing.get(site_tags.n_beds)
-                n_baths = listing.get(site_tags.n_baths)
+                n_beds = float(re.sub(r'[^0-9.]', '', listing.get(site_tags.n_beds))) if listing.get(site_tags.n_beds) not in [None, "0", ""] else 1
+                n_baths = float(re.sub(r'[^0-9.]', '', listing.get(site_tags.n_baths))) if listing.get(site_tags.n_baths) not in [None, "0", ""] else 1
                 avbl_date = parser.parse(listing.get(site_tags.avbl_date))
                 if(url == "https://m.bostonpads.com/api/listings-short?location=boston&unique=1&results_per_page=4000" 
                    and listing.get(site_tags.building_address) is not None):
                     location = listing.get(site_tags.building_address)["street_address"] or listing.get(site_tags.area)
                 else:
                     location = listing.get(site_tags.building_address) or listing.get(site_tags.area)
-                utilities = None  # Fill in the correct field name if available in the data
-                amenities = None  # Fill in the correct field name if available in the data
+                utilities = "Utilities paid for: " + ("Heat - Yes, " if listing.get(site_tags.heat) == True else "Heat - No, ") + \
+                                                     ("Hot Water - Yes, " if listing.get(site_tags.hot_water) == "1" else "Hot Water - No, ") + \
+                                                     ("Electricity - Yes, " if listing.get(site_tags.electricity) == True else "Electricity - No.")
+                                                     
+                amenities = "Utilities paid for: " + ("Parking - " + (listing.get(site_tags.parking) if listing.get(site_tags.parking) not in ["", None] else "No") + ", ") + \
+                                                     ("Dish Washer - Yes, " if listing.get(site_tags.dish_washer) == True else "Dish Washer - No, ") + \
+                                                     ("Laundry - " + (listing.get(site_tags.laundry_location) if listing.get(site_tags.laundry_location) not in ["", None] else "No") + ", ") + \
+                                                     ("Air Conditioning - " + (listing.get(site_tags.air_conditioning) if listing.get(site_tags.air_conditioning) not in ["", None] else "No") + ".") 
+                                                    
                 agent_name = listing.get(site_tags.agent_name)
                 agent_email = listing.get(site_tags.agent_email)
                 agent_phone = listing.get(site_tags.agent_phone)
