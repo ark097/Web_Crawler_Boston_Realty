@@ -10,6 +10,7 @@ import requests
 import sqlite3
 from WebpageClass import WebpageData
 from dateutil import parser
+from datetime import date
 import re
 from bs4 import BeautifulSoup
 
@@ -33,8 +34,8 @@ cursor.execute('''
                    id INTEGER PRIMARY KEY,                   
                    last_updated DATETIME,
                    price INT,
-                   n_beds INT,
-                   n_baths INT,
+                   n_beds FLOAT,
+                   n_baths FLOAT,
                    available_date DATETIME,
                    location TEXT,
                    utilities TEXT,
@@ -103,7 +104,7 @@ def fetch_data(url):
             # Append the current page number to the URL
             current_url = f"{url}&page={page_num}"
             
-            if page_num % 25 == 0:
+            if page_num % 3 == 0:
                 print(f'Page {page_num} fetched')
             
             # Make an HTTP request to the URL
@@ -114,7 +115,7 @@ def fetch_data(url):
             # Find the listings on the current page
             listings = soup.find('div', class_='search_results_area').find_all('div', class_='property_item')
             if not listings:
-                print("No listings found on this page.")
+                print("All listings from url fetched.")
                 break
             
             # Fetch the broker details for the listings
@@ -128,22 +129,25 @@ def fetch_data(url):
             for listing in listings:
                 listing_details = listing.find('div', class_='item_props').find_all('div', class_='column')
                 try:
-                    price = listing_details[0].text.strip()
+                    price = int(listing_details[0].text.strip().replace('$','').replace(',',''))
                 except IndexError:
                     pass
 
                 try:
-                    n_beds = listing_details[1].text.strip()
+                    n_beds = re.sub(r'[^0-9.]', '', listing_details[1].text.strip())
+                    n_beds = float(n_beds) if n_beds not in [None, "0", ""] else 1
                 except IndexError:
                     pass
 
                 try:
                     n_baths = listing_details[2].text.strip()
+                    n_baths = float(re.sub(r'[^0-9.]', '', n_baths)) if n_baths not in [None, "0", ""] else 1
                 except IndexError:
                     pass
 
                 try:
-                    avbl_date = listing_details[3].text.strip()
+                    avbl_date = re.sub(r'[^0-9/]', '', listing_details[3].text.strip()) 
+                    avbl_date = parser.parse(avbl_date) if avbl_date not in ["",None] else date.today()
                 except IndexError:
                     pass
                 
