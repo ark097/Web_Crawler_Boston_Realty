@@ -8,11 +8,13 @@ Created on Mon Jul 31 22:35:19 2023
 
 import requests
 import sqlite3
-from WebpageClass import WebpageData
 from dateutil import parser
 from datetime import date
-import re
 from bs4 import BeautifulSoup
+import re
+
+from WebpageClass import WebpageData
+from SubareaFinder import find_area_bostonpads, find_area_ygl
 
 # Set up SQLite database and server
 
@@ -38,6 +40,7 @@ cursor.execute('''
                    n_baths FLOAT,
                    available_date DATETIME,
                    location TEXT,
+                   area TEXT,
                    utilities TEXT,
                    amenities TEXT,
                    agent_name TEXT,
@@ -74,6 +77,8 @@ def fetch_data(url):
                         location = listing.get(site_tags.building_address)["street_address"] or listing.get(site_tags.area)
                     else:
                         location = listing.get(site_tags.building_address) or listing.get(site_tags.area)
+                    
+                    area = find_area_bostonpads(listing.get(site_tags.area))
                     utilities = "Utilities paid for: " + ("Heat - Yes, " if listing.get(site_tags.heat) == True else "Heat - No, ") + \
                                                          ("Hot Water - Yes, " if listing.get(site_tags.hot_water) == "1" else "Hot Water - No, ") + \
                                                          ("Electricity - Yes, " if listing.get(site_tags.electricity) == True else "Electricity - No.")
@@ -87,7 +92,7 @@ def fetch_data(url):
                     agent_email = listing.get(site_tags.agent_email)
                     agent_phone = listing.get(site_tags.agent_phone)
                     agent_fees = "No" if listing.get(site_tags.agent_fees) == 0 else "Yes"
-                    save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location,
+                    save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, area,
                                utilities, amenities, agent_name, agent_email, agent_phone, agent_fees)
             
             else:
@@ -104,7 +109,7 @@ def fetch_data(url):
             # Append the current page number to the URL
             current_url = f"{url}&page={page_num}"
             
-            if page_num % 3 == 0:
+            if page_num % 10 == 0:
                 print(f'Page {page_num} fetched')
             
             # Make an HTTP request to the URL
@@ -129,19 +134,19 @@ def fetch_data(url):
             for listing in listings:
                 listing_details = listing.find('div', class_='item_props').find_all('div', class_='column')
                 try:
-                    price = int(listing_details[0].text.strip().replace('$','').replace(',',''))
+                    price = int(re.sub(r'[^0-9]', '', listing_details[0].text.strip()))
                 except IndexError:
                     pass
 
                 try:
                     n_beds = re.sub(r'[^0-9.]', '', listing_details[1].text.strip())
-                    n_beds = float(n_beds) if n_beds not in [None, "0", ""] else 1
+                    n_beds = float(n_beds) if n_beds not in [None, "0", ""] else round(float(1), 1)
                 except IndexError:
                     pass
 
                 try:
                     n_baths = listing_details[2].text.strip()
-                    n_baths = float(re.sub(r'[^0-9.]', '', n_baths)) if n_baths not in [None, "0", ""] else 1
+                    n_baths = float(re.sub(r'[^0-9.]', '', n_baths)) if n_baths not in [None, "0", ""] else round(float(1), 1)
                 except IndexError:
                     pass
 
@@ -154,13 +159,15 @@ def fetch_data(url):
                 location = listing.find('a', class_='item_title')
                 if location:
                     location = location.text.strip()
+                    area = find_area_ygl(location)
+                    
                 utilities = listing.find('a')
                 if utilities:
                     utilities = utilities['href']
                 amenities = listing.find('a')
                 if amenities:
                     amenities = amenities['href']
-                save_to_db(None, price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone, None)
+                save_to_db(None, price, n_beds, n_baths, avbl_date, location, area, utilities, amenities, agent_name, agent_email, agent_phone, "Yes")
             
             # Check for the last page
             counter_div = soup.find('div', class_='counter')
@@ -180,9 +187,9 @@ def fetch_data(url):
             
             # END OF fetch_data()
 
-def save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees):
-    insert_query = 'INSERT INTO boston_rental_data (last_updated, price, n_beds, n_baths, available_date, location, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    values = (last_updated, price, n_beds, n_baths, avbl_date, location, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees)
+def save_to_db(last_updated, price, n_beds, n_baths, avbl_date, location, area, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees):
+    insert_query = 'INSERT INTO boston_rental_data (last_updated, price, n_beds, n_baths, available_date, location, area, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    values = (last_updated, price, n_beds, n_baths, avbl_date, location, area, utilities, amenities, agent_name, agent_email, agent_phone, agent_fees)
     conn.execute(insert_query, values)
     conn.commit()
 
