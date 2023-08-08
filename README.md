@@ -8,6 +8,8 @@ Landing Database Page:
  
 ![image](https://github.com/ark097/Web_Crawler_Boston_Realty/assets/41021854/ae72887d-2938-4144-b859-a7f0395fd5af)
 
+Dashboard with several analytics and filters to aid the user's house hunt
+
 ![image](https://github.com/ark097/Web_Crawler_Boston_Realty/assets/41021854/2a08e6ce-3581-46b9-af3d-fe1bae1ce8d4)
 
 
